@@ -19,24 +19,26 @@ const fileCache = localForage.createInstance({
   onResolve and onLoad run after each other repeatedly until all files (such as imports) are loaded.
 */
 
-export const unpkgPathPlugin = () => {
+export const unpkgPathPlugin = (inputCode: string) => {
   return {
     name: 'unpkg-path-plugin',
     setup(build: esbuild.PluginBuild) {
+      //Handle root entry of index.js
+      build.onResolve({ filter: /(^index\.js$)/ }, () => {
+        return { path: 'index.js', namespace: 'a' };
+      });
+
+      //handle module relative paths
+      build.onResolve({ filter: /^\.+\// }, (args: any) => {
+        return {
+          namespace: 'a',
+          path: new URL(args.path, 'https://unpkg.com' + args.resolveDir + '/')
+            .href,
+        };
+      });
+
+      //Handle main module file
       build.onResolve({ filter: /.*/ }, async (args: any) => {
-        if (args.path === 'index.js') {
-          return { path: args.path, namespace: 'a' };
-        }
-        //Handling relative files
-        if (args.path.includes('./') || args.path.includes('../')) {
-          return {
-            namespace: 'a',
-            path: new URL(
-              args.path,
-              'https://unpkg.com' + args.resolveDir + '/'
-            ).href,
-          };
-        }
         return {
           namespace: 'a',
           path: `https://unpkg.com/${args.path}`,
@@ -47,10 +49,7 @@ export const unpkgPathPlugin = () => {
         if (args.path === 'index.js') {
           return {
             loader: 'jsx',
-            contents: `
-              const message = require('react');
-              console.log(message);
-            `,
+            contents: inputCode,
           };
         }
         //caching
